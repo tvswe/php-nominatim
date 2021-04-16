@@ -12,9 +12,10 @@ declare(strict_types=1);
 namespace maxh\Nominatim;
 
 use GuzzleHttp\Client;
-use GuzzleHttp\Psr7\Request;
+use GuzzleHttp\Message\Request;
+use GuzzleHttp\Message\RequestInterface;
 use maxh\Nominatim\Exceptions\NominatimException;
-use Psr\Http\Message\ResponseInterface;
+use GuzzleHttp\Message\ResponseInterface;
 use RuntimeException;
 use SimpleXMLElement;
 
@@ -177,20 +178,14 @@ class Nominatim
      */
     public function find(QueryInterface $nRequest, array $headers = [])
     {
-        $url = $this->application_url.'/'.$nRequest->getPath().'?';
-        $request = new Request('GET', $url, array_merge($this->defaultHeaders, $headers));
+        $url = $this->application_url.'/'.$nRequest->getPath();
+        $request = $this->http_client->createRequest('GET', $url, [
+            'headers' => array_merge($this->defaultHeaders, $headers),
+            'query' => $nRequest->getQuery()
+        ]);
+        $response = $this->http_client->send($request);
 
-        //Convert the query array to string with space replace to +
-        $query = \GuzzleHttp\Psr7\build_query($nRequest->getQuery(), PHP_QUERY_RFC1738);
-
-        $url = $request->getUri()->withQuery($query);
-        $request = $request->withUri($url);
-
-        return $this->decodeResponse(
-            $nRequest->getFormat(),
-            $request,
-            $this->http_client->send($request)
-        );
+        return $this->decodeResponse($nRequest->getFormat(), $request, $response);
     }
 
     /**
@@ -213,7 +208,7 @@ class Nominatim
      *
      * @return array|SimpleXMLElement
      */
-    private function decodeResponse(string $format, Request $request, ResponseInterface $response)
+    private function decodeResponse(string $format, RequestInterface $request, ResponseInterface $response)
     {
         if ('json' === $format || 'jsonv2' === $format || 'geojson' === $format || 'geocodejson' === $format) {
             return json_decode($response->getBody()->getContents(), true);
